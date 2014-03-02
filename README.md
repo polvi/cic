@@ -1,4 +1,4 @@
-coreos on coreos
+coreos in coreos
 
 ```
 $ git clone https://github.com/polvi/cic
