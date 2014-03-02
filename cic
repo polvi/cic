@@ -64,9 +64,6 @@ ExecStart=/bin/bash -c \"while true; do sleep 10000; done\"
 ExecStopPost=/bin/rm -rf $BASE"
 echo "${UNIT}" > /var/run/systemd/system/${NAME}-cleanup.service
 
-# print the nspawn unit
-echo ${NAME}
-
 systemctl start cic-$MACH.service
 # this is some weird race that needs to be reported to systemd
 sleep .1
