@@ -1,0 +1,74 @@
+#!/bin/bash
+
+set -e
+# Standard generator setup, they take three arguments but allow none too.
+if [[ $# -ne 1 ]]; then
+    echo "$0 <name>"
+    exit 1
+fi
+
+MACH=$1
+ROOT=/tmp/coreception
+
+BASE=${ROOT}/${MACH}
+BASE=$(echo $BASE | sed 's:/$::')
+MP_ROOT="${BASE}/root/"
+# strip double slashes
+# strip leading and trailing slashes, then switch / to - for systemd naming
+NAME=$(echo $MP_ROOT | sed 's:^/::')
+NAME=$(echo $NAME | sed 's:/$::')
+NAME=$(echo $NAME | sed 's:/:-:g')
+MUNIT="${NAME}.mount"
+
+# mount unit
+UNIT="[Unit]
+Requires=${NAME}.service
+After=${NAME}.service
+PartOf=cic-${MACH}.service
+BindsTo=cic-${MACH}.service
+
+[Mount]
+What=none
+Where=${MP_ROOT}
+Type=aufs
+Options=br=${BASE}/rw:/"
+echo "${UNIT}" > /var/run/systemd/system/${NAME}.mount
+
+# unit to setup workdir
+UNIT="[Unit]
+Requires=${NAME}-cleanup.service
+
+[Service]
+ExecStart=/bin/mkdir -p $BASE/rw
+Type=oneshot"
+echo "${UNIT}" > /var/run/systemd/system/${NAME}.service
+
+# nspawn unit
+UNIT="[Unit]
+Requires=${NAME}.mount
+After=${NAME}.mount
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/systemd-nspawn --private-network -M ${MACH} -D ${MP_ROOT} -b"
+N_UNIT="cic-${MACH}.service"
+echo "${UNIT}" > /var/run/systemd/system/${N_UNIT}
+
+UNIT="[Unit]
+BindTo=${NAME}.mount
+# use before so it is shut down after the mount
+Before=${NAME}.mount
+
+[Service]
+ExecStart=/bin/bash -c \"while true; do sleep 10000; done\"
+ExecStopPost=/bin/rm -rf $BASE"
+echo "${UNIT}" > /var/run/systemd/system/${NAME}-cleanup.service
+
+# print the nspawn unit
+echo ${NAME}
+
+systemctl start cic-$MACH.service
+# this is some weird race that needs to be reported to systemd
+sleep .1
+LEADER=$(machinectl status $MACH | grep Leader | awk '{print $2}')
+nsenter -t $LEADER -m -u -i -p -n
