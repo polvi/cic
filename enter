@@ -1,0 +1,5 @@
+#!/bin/bash
+
+MACH=$1
+LEADER=$(machinectl status $MACH | grep Leader | awk '{print $2}')
+nsenter -t $LEADER -m -u -i -p -n
